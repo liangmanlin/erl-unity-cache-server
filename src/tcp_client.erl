@@ -243,7 +243,7 @@ send_pack(Bin) ->
 	catch gen_tcp:send(get_socket(), Bin).
 
 start_push_file(Key) ->
-	io:format("start putting ~s~n", [binary_to_hex(Key)]),
+	io:format("start putting ~s~n", [lib:binary_to_hex(Key)]),
 	%% 这里需要处理并发问题，除了第一个人，其他人都不会写入文件，仅仅接收协议
 	case gen_server:call(unity_cache_server, {start_check, Key, self()}) of
 		true ->
@@ -254,7 +254,7 @@ start_push_file(Key) ->
 			ok
 	end.
 
-write_file(TotalSize, O, BinList) ->
+write_file(_TotalSize, O, BinList) ->
 	case get(file_io) of
 		undefined -> ok;
 		{Key, Path, FileName, L} ->
@@ -275,9 +275,9 @@ end_push_file() ->
 				fun(O) ->
 					case ets:lookup(Ets2, {UID, O}) of
 						[] ->
-							ets:insert(Ets2, {{UID, O}, [{Hash, now()}]});
+							ets:insert(Ets2, {{UID, O}, [{Hash, lib:now()}]});
 						[{K, LL}] ->
-							L2 = lists:keystore(Hash, 1, LL, {Hash, now()}),
+							L2 = lists:keystore(Hash, 1, LL, {Hash, lib:now()}),
 							ets:insert(Ets2, {K, L2})
 					end,
 					ets:insert(Ets, {{Key, O}, Path})
@@ -287,3 +287,4 @@ end_push_file() ->
 
 get_socket()->
 	get(socket).
+

@@ -1,4 +1,4 @@
-  
+
 %%%----------------------------------------------------------------------------------
 %%% @author manlin
 %%% @doc
@@ -25,7 +25,7 @@
 -record(state,{}).
 
 start()->
-    io:formt("~s~n",["startint server"]),
+    io:format("~s~n",["startint server"]),
     start_svr(),
     gate_app:listen(cache_server,get_port(),[binary,{reuseaddr,true}],tcp_client),
     io:format("~s~n",["start done"]).
@@ -48,7 +48,7 @@ init([])->
     try_build_ets(),
     erlang:send_after(?dump_time*1000,self(),loop),
     %% 每天4点清理
-    T = four_clock_sec(),
+    T = lib:four_clock_sec(),
     erlang:send_after(T*1000,self(),clean),
     {ok,#state{}}.
 
@@ -91,42 +91,42 @@ handle_info({'DOWN',_Ref,_,Pid,_Reason},State)->
 handle_info(loop,State)->
     erlang:send_after(?dump_time*1000,self(),loop),
     lists:foreach(
-                  fun(I)->
-                      case erase({dirty,I}) of
-                          true->
-                              erlang:spawn(fun()->dump(I) end);
-                           _->
-                               ok
-                       end
-                  end,lists:seq(1,?CACHE_FILE_SIZE)),
-   {noreply,State};
+        fun(I)->
+            case erase({dirty,I}) of
+                true->
+                    erlang:spawn(fun()->dump(I) end);
+                _->
+                    ok
+            end
+        end,lists:seq(1,?CACHE_FILE_SIZE)),
+    {noreply,State};
 handle_info(clean,State)->
     erlang:send_after(?DAY_SECONDS*1000,self(),clean),
     Level = get_level(),
     lists:foreach(
-                  fun(I)->
-                      do_clean(Level,I)
-                            end,lists:seq(1,?CACHE_FILE_SIZE)),
+        fun(I)->
+            do_clean(Level,I)
+        end,lists:seq(1,?CACHE_FILE_SIZE)),
     {noreply,State};
 handle_info({clean,Level},State)->
     lists:foreach(
-                  fun(I)->
-                      do_clean(Level,I)
-                            end,lists:seq(1,?CACHE_FILE_SIZE)),
+        fun(I)->
+            do_clean(Level,I)
+        end,lists:seq(1,?CACHE_FILE_SIZE)),
     {noreply,State};
 handle_info(_Info,State)->
     {noreply,State}.
 
 terminate(_Reason,_State)->
     lists:foreach(
-                  fun(I)->
-                      case erase({dirty,I}) of
-                          true->
-                              dump(I);
-                          _->
-                              ok
-                      end
-                      end,lists:seq(1,?CACHE_FILE_SIZE)),
+        fun(I)->
+            case erase({dirty,I}) of
+                true->
+                    dump(I);
+                _->
+                    ok
+            end
+        end,lists:seq(1,?CACHE_FILE_SIZE)),
     ok.
 
 code_change(_OldVsn,State,_Extra)->
@@ -136,14 +136,17 @@ dump(Index)->
     Root = get_root(),
     Ets1 = get_ets(Index),
     Ets2 = get_uid_ets(Index),
-    ets:tab2file(Ets1,Root++"/file_cache_ets_"++integer_to_list(Index)++".ets",
-    ets:tab2file(Ets1,Root++"/uid_ets_"++integer_to_list(Index)++".ets",
+    ets:tab2file(Ets1,Root++"/file_cache_ets_"++integer_to_list(Index)++".ets"),
+    ets:tab2file(Ets2,Root++"/uid_ets_"++integer_to_list(Index)++".ets"),
     ok.
 
 get_ets(Index) when is_integer(Index)->
     list_to_atom("file_cache_ets_"++integer_to_list(Index));
 get_ets(UID)->
     get_ets(erlang:phash(UID,?CACHE_FILE_SIZE)).
+
+get_uid_ets(Index)->
+    list_to_atom("uid_ets_"++integer_to_list(Index)).
 
 hash_key(UID)->
     erlang:phash(UID,?CACHE_FILE_SIZE).
@@ -159,16 +162,16 @@ get_random_path()->
 get_file_name(Path,Key,O)->
     {Path1,Path2} = Path,
     Root = get_root(),
-    Name = binary_to_hex(Key),
+    Name = lib:binary_to_hex(Key),
     case O of
         false->
             io_lib:format("~s/~p/~p/~s",[Root,Path1,Path2,Name]);
         _->
-           io_lib:format("~s/~p/~p/~s.~s",[Root,Path1,Path2,Name,[O]])
+            io_lib:format("~s/~p/~p/~s.~s",[Root,Path1,Path2,Name,[O]])
     end.
 
 build_path(Root)->
-    os:cmd(mkdir -p "++Root),
+    os:cmd("mkdir -p "++Root),
     {ok,RootL} = prim_file:list_dir(Root),
     RM = maps:from_list([{P,true}||P<-RootL]),
     lists:foreach(
@@ -189,56 +192,56 @@ build_path(Root)->
                             prim_file:make_dir(Path2)
                     end
                 end,lists:seq(0,?path_2_num-1))
-  end,lists:seq(0,?path_1_num-1)).
-  
+        end,lists:seq(0,?path_1_num-1)).
+
 get_root()->
     case init:get_argument(root_path) of
         {ok,[[Root]]}->
             Root;
-         _->
+        _->
             ?DEFAULT_ROOT
     end.
-    
- get_port()->
+
+get_port()->
     case init:get_argument(port) of
         {ok,[[Port]]}->
             list_to_integer(Port);
         _->
             20014
     end.
-    
- get_level()->
+
+get_level()->
     1.
-    
- do_clean(_Level,Index)->
+
+do_clean(_Level,Index)->
     Ets1 = get_ets(Index),
     Ets2 = get_uid_ets(Index),
     CheckTime = now()-5*?DAY_SECONDS,
     Rec = 1,
     DelList =
-    ets:foldl(
-        fun({Key,List},Acc)->
-            case List of
-                []->Acc;
-                [_] when Rec > 0 ->Acc;
-                _->
-                    case Rec > 0 of
-                        true->
-                            SL = lists:sort(fun({_,A},{_,B})->A>B end,List),
-                            {List2,Less} = sub_list(SL,Rec);
-                        false->
-                            List2 = [],Less = List
-                    end,
-                    case [A||{_,Time}=A<-Less,CheckTime >= Time] of
-                        []->
-                            Acc;
-                        Del->
-                            Less2 = Less--Del,
-                            ets:update_element(Ets2,Key,{2,List2++Less2}),
-                            [{Key,Del}|Acc]
-                    end
-             end
-      end,[],Ets2),
+        ets:foldl(
+            fun({Key,List},Acc)->
+                case List of
+                    []->Acc;
+                    [_] when Rec > 0 ->Acc;
+                    _->
+                        case Rec > 0 of
+                            true->
+                                SL = lists:sort(fun({_,A},{_,B})->A>B end,List),
+                                {List2,Less} = lib:sub_list(SL,Rec);
+                            false->
+                                List2 = [],Less = List
+                        end,
+                        case [A||{_,Time}=A<-Less,CheckTime >= Time] of
+                            []->
+                                Acc;
+                            Del->
+                                Less2 = Less--Del,
+                                ets:update_element(Ets2,Key,{2,List2++Less2}),
+                                [{Key,Del}|Acc]
+                        end
+                end
+            end,[],Ets2),
     lists:foreach(
         fun({{UID,O},DL})->
             lists:foreach(
@@ -253,18 +256,35 @@ get_root()->
                     end,
                     ets:delete(Ets1,{Key,O})
                 end,DL)
-          end,DelList),
-  case DelList of
-    []->ok;
-    _->
-        put({dirty,Index},true)
-  end.
-  
+        end,DelList),
+    case DelList of
+        []->ok;
+        _->
+            put({dirty,Index},true)
+    end.
+
 load_cache_file(Root)->
     lists:foreach(
         fun(Hash)->
             ets:file2tab(Root++"/file_cache_ets_"++integer_to_list(Hash)++".ets"),
             ets:file2tab(Root++"/uid_ets_"++integer_to_list(Hash)++".ets")
         end,lists:seq(1,?CACHE_FILE_SIZE)).
-        
 
+try_build_ets()->
+    lists:foreach(
+        fun(Index)->
+            Ets1 = get_ets(Index),
+            case ets:info(Ets1) of
+                undefined->
+                    ets:new(Ets1,[public,set,named_table]);
+                _->
+                    ok
+            end,
+            Ets2 = get_uid_ets(Index),
+            case ets:info(Ets2) of
+                undefined->
+                    ets:new(Ets2,[public,set,named_table]);
+                _->
+                    ok
+            end
+        end,lists:seq(1,?CACHE_FILE_SIZE)).
